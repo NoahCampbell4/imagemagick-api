@@ -28,12 +28,15 @@ app.post(
 
       // 3. Parse coordinates JSON
       let coords;
-      try {
-        coords = JSON.parse(req.body.coordinates);
-      } catch (err) {
-        fs.unlink(imagePath, () => {});
-        return res.status(400).send('Invalid coordinates JSON');
-      }
+	try {
+ 	 const coordsPath = req.files.coordinates[0].path;   // path to uploaded JSON file
+ 	 const coordsData = fs.readFileSync(coordsPath, 'utf8');
+ 	 coords = JSON.parse(coordsData);
+	  fs.unlink(coordsPath, () => {}); // cleanup JSON file after reading
+	} catch (err) {
+ 	 fs.unlink(imagePath, () => {});
+ 	 return res.status(400).send('Invalid coordinates JSON');
+	}
 
       if (!Array.isArray(coords) || coords.length === 0) {
         fs.unlink(imagePath, () => {});
