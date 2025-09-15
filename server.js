@@ -52,7 +52,7 @@ app.post(
       const outputPath = path.join(__dirname, 'output.jpg');
 
       // 6. Build and run ImageMagick command
-      const cmd = `magick ${imagePath} -stroke red -strokewidth 3 -fill none -draw "${drawArgs}" ${outputPath}`;
+      const cmd = `magick -version`;
       exec(cmd, (err) => {
         // Always clean up uploaded file
         fs.unlink(imagePath, () => {});
