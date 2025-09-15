@@ -1,42 +1,81 @@
-import express from 'express';
-import multer from 'multer';
-import { exec } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require('express');
+const multer = require('multer');
+const { exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
+
+// Multer config — store uploads in /uploads
 const upload = multer({ dest: 'uploads/' });
 
-app.use(express.json());
+// POST /draw-boxes endpoint
+app.post(
+  '/draw-boxes',
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'coordinates', maxCount: 1 }
+  ]),
+  (req, res) => {
+    try {
+      // 1. Validate file
+      if (!req.files || !req.files.image) {
+        return res.status(400).send('No image uploaded');
+      }
 
-// POST /draw-boxes
-app.post('/draw-boxes', upload.single('image'), (req, res) => {
-  const coords = JSON.parse(req.body.coordinates); // Expect array of {x1,y1,x2,y2}
-  const inputPath = req.file.path;
-  const outputPath = path.join(__dirname, 'output.jpg');
+      // 2. Get uploaded image path
+      const imagePath = req.files.image[0].path;
 
-  // Build draw commands
-  const drawCmds = coords
-    .map(c => `-draw "rectangle ${c.x1},${c.y1} ${c.x2},${c.y2}"`)
-    .join(' ');
+      // 3. Parse coordinates JSON
+      let coords;
+      try {
+        coords = JSON.parse(req.body.coordinates);
+      } catch (err) {
+        fs.unlink(imagePath, () => {});
+        return res.status(400).send('Invalid coordinates JSON');
+      }
 
-  const cmd = `magick ${inputPath} -stroke red -strokewidth 3 -fill none ${drawCmds} ${outputPath}`;
+      if (!Array.isArray(coords) || coords.length === 0) {
+        fs.unlink(imagePath, () => {});
+        return res.status(400).send('Coordinates must be a non-empty array');
+      }
 
-  exec(cmd, (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).send('Error processing image');
+      // 4. Build ImageMagick draw commands
+      const drawArgs = coords
+        .map(c => `rectangle ${c.x1},${c.y1} ${c.x2},${c.y2}`)
+        .join(' ');
+
+      // 5. Define output path
+      const outputPath = path.join(__dirname, 'output.jpg');
+
+      // 6. Build and run ImageMagick command
+      const cmd = `magick ${imagePath} -stroke red -strokewidth 3 -fill none -draw "${drawArgs}" ${outputPath}`;
+      exec(cmd, (err) => {
+        // Always clean up uploaded file
+        fs.unlink(imagePath, () => {});
+
+        if (err) {
+          console.error('ImageMagick error:', err);
+          return res.status(500).send('Image processing failed');
+        }
+
+        // 7. Send processed image
+        res.sendFile(outputPath, (err) => {
+          if (!err) {
+            // Optionally delete output after sending
+            fs.unlink(outputPath, () => {});
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Processing error:', err);
+      res.status(500).send('Server error');
     }
-    res.sendFile(outputPath, () => {
-      fs.unlinkSync(inputPath);
-      fs.unlinkSync(outputPath);
-    });
-  });
-});
+  }
+);
 
+// Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`ImageMagick API running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`ImageMagick API running on port ${PORT}`);
+});
