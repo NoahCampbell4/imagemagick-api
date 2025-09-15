@@ -58,9 +58,13 @@ app.post(
         fs.unlink(imagePath, () => {});
 
         if (err) {
-          console.error('ImageMagick error:', err);
-          return res.status(500).send('Image processing failed');
-        }
+    	  console.error('ImageMagick error:', err.message);
+    	  console.error('Exit code:', err.code);
+   	  console.error('Signal:', err.signal);
+  	  console.error('stderr:', stderr);
+  	  console.error('stdout:', stdout);
+    	return res.status(500).send('Image processing failed');
+      }
 
         // 7. Send processed image
         res.sendFile(outputPath, (err) => {
